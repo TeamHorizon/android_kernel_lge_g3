@@ -42,6 +42,11 @@
 #include <linux/skbuff.h>
 #include <linux/workqueue.h>
 #include <linux/sysfs.h>
+#include <linux/rtc.h>
+#include <linux/time.h>
+#include <linux/math64.h>
+#include <linux/suspend.h>
+#include <linux/notifier.h>
 #include <net/net_namespace.h>
 #include <net/sock.h>
 
@@ -59,6 +64,12 @@ struct idletimer_tg {
 	struct kobject *kobj;
 	struct idletimer_tg_attr attr;
 
+	struct timespec delayed_timer_trigger;
+	struct timespec last_modified_timer;
+	struct timespec last_suspend_time;
+	struct notifier_block pm_nb;
+
+	int timeout;
 	unsigned int refcnt;
 	bool send_nl_msg;
 	bool active;
@@ -67,17 +78,49 @@ struct idletimer_tg {
 
 static LIST_HEAD(idletimer_tg_list);
 static DEFINE_MUTEX(list_mutex);
+static DEFINE_SPINLOCK(timestamp_lock);
 
 static struct kobject *idletimer_tg_kobj;
+
+static bool check_for_delayed_trigger(struct idletimer_tg *timer,
+		struct timespec *ts)
+{
+	bool state;
+	struct timespec temp;
+	spin_lock_bh(&timestamp_lock);
+	if ((ts->tv_sec - timer->last_modified_timer.tv_sec) > timer->timeout ||
+			timer->delayed_timer_trigger.tv_sec != 0) {
+		state = false;
+		temp.tv_sec = timer->timeout;
+		temp.tv_nsec = 0;
+		if (timer->delayed_timer_trigger.tv_sec != 0) {
+			temp = timespec_add(timer->delayed_timer_trigger, temp);
+			ts->tv_sec = temp.tv_sec;
+			ts->tv_nsec = temp.tv_nsec;
+			timer->delayed_timer_trigger.tv_sec = 0;
+			schedule_work(&timer->work);
+		} else {
+			temp = timespec_add(timer->last_modified_timer, temp);
+			ts->tv_sec = temp.tv_sec;
+			ts->tv_nsec = temp.tv_nsec;
+		}
+	} else {
+		state = timer->active;
+	}
+	spin_unlock_bh(&timestamp_lock);
+	return state;
+}
 
 static void notify_netlink_uevent(const char *iface, struct idletimer_tg *timer)
 {
 	char iface_msg[NLMSG_MAX_SIZE];
 	char state_msg[NLMSG_MAX_SIZE];
 	char timestamp_msg[NLMSG_MAX_SIZE];
-	char uid_msg[NLMSG_MAX_SIZE];
-	char *envp[] = { iface_msg, state_msg, timestamp_msg, uid_msg, NULL };
+	char *envp[] = { iface_msg, state_msg, timestamp_msg, NULL };
 	int res;
+	struct timespec ts;
+	uint64_t time_ns;
+	bool state;
 
 	res = snprintf(iface_msg, NLMSG_MAX_SIZE, "INTERFACE=%s",
 		       iface);
@@ -86,23 +129,14 @@ static void notify_netlink_uevent(const char *iface, struct idletimer_tg *timer)
 		return;
 	}
 
-	get_monotonic_boottime(&ts);
+	getnstimeofday(&ts);
 	state = check_for_delayed_trigger(timer, &ts);
 	res = snprintf(state_msg, NLMSG_MAX_SIZE, "STATE=%s",
-		       timer->active ? "active" : "inactive");
+			state ? "active" : "inactive");
+
 	if (NLMSG_MAX_SIZE <= res) {
 		pr_err("message too long (%d)", res);
 		return;
-	}
-
-	if (state) {
-		res = snprintf(uid_msg, NLMSG_MAX_SIZE, "UID=%u", timer->uid);
-		if (NLMSG_MAX_SIZE <= res)
-			pr_err("message too long (%d)", res);
-	} else {
-		res = snprintf(uid_msg, NLMSG_MAX_SIZE, "UID=");
-		if (NLMSG_MAX_SIZE <= res)
-			pr_err("message too long (%d)", res);
 	}
 
 	time_ns = timespec_to_ns(&ts);
@@ -112,12 +146,9 @@ static void notify_netlink_uevent(const char *iface, struct idletimer_tg *timer)
 		pr_err("message too long (%d)", res);
 	}
 
-	pr_debug("putting nlmsg: <%s> <%s> <%s> <%s>\n", iface_msg, state_msg,
-		 timestamp_msg, uid_msg);
+	pr_debug("putting nlmsg: <%s> <%s>\n", iface_msg, state_msg);
 	kobject_uevent_env(idletimer_tg_kobj, KOBJ_CHANGE, envp);
 	return;
-
-
 }
 
 static
@@ -192,7 +223,7 @@ static int idletimer_resume(struct notifier_block *notifier,
 
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
-		get_monotonic_boottime(&timer->last_suspend_time);
+		getnstimeofday(&timer->last_suspend_time);
 		break;
 	case PM_POST_SUSPEND:
 		if (!timer || !timer->active)
@@ -200,7 +231,7 @@ static int idletimer_resume(struct notifier_block *notifier,
 		/* since jiffies are not updated when suspended now represents
 		 * the time it would have suspended */
 		if (time_after(timer->timer.expires, now)) {
-			get_monotonic_boottime(&ts);
+			getnstimeofday(&ts);
 			ts = timespec_sub(ts, timer->last_suspend_time);
 			time_diff = timespec_to_jiffies(&ts);
 			if (timer->timer.expires > (time_diff + now)) {
@@ -256,7 +287,7 @@ static int idletimer_tg_create(struct idletimer_tg_info *info)
 	spin_lock_bh(&timestamp_lock);
 	info->timer->delayed_timer_trigger.tv_sec = 0;
 	info->timer->delayed_timer_trigger.tv_nsec = 0;
-	get_monotonic_boottime(&info->timer->last_modified_timer);
+	getnstimeofday(&info->timer->last_modified_timer);
 	spin_unlock_bh(&timestamp_lock);
 
 	info->timer->pm_nb.notifier_call = idletimer_resume;
@@ -297,11 +328,11 @@ static void reset_timer(const struct idletimer_tg_info *info)
 		if (cancel_work_sync(&timer->work))
 			timer->delayed_timer_trigger = timer->last_modified_timer;
 
-		get_monotonic_boottime(&timer->last_modified_timer);
+		getnstimeofday(&timer->last_modified_timer);
 		schedule_work(&timer->work);
 	}
 
-	get_monotonic_boottime(&timer->last_modified_timer);
+	getnstimeofday(&timer->last_modified_timer);
 	mod_timer(&timer->timer,
 			msecs_to_jiffies(info->timeout * 1000) + now);
 	spin_unlock_bh(&timestamp_lock);
@@ -311,26 +342,16 @@ static void reset_timer(const struct idletimer_tg_info *info)
  * The actual xt_tables plugin.
  */
 static unsigned int idletimer_tg_target(struct sk_buff *skb,
-					 const struct xt_action_param *par)
+		const struct xt_action_param *par)
 {
 	const struct idletimer_tg_info *info = par->targinfo;
-	unsigned long now = jiffies;
-
 	pr_debug("resetting timer %s, timeout period %u\n",
 		 info->label, info->timeout);
 
 	BUG_ON(!info->timer);
 
-	info->timer->active = true;
-
-	if (time_before(info->timer->timer.expires, now)) {
-		schedule_work(&info->timer->work);
-		pr_debug("Starting timer %s (Expired, Jiffies): %lu, %lu\n",
-			 info->label, info->timer->timer.expires, now);
-	}
-
 	/* TODO: Avoid modifying timers on each packet */
-	reset_timer(info, skb);
+	reset_timer(info);
 	return XT_CONTINUE;
 }
 
@@ -338,8 +359,6 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 {
 	struct idletimer_tg_info *info = par->targinfo;
 	int ret;
-	unsigned long now = jiffies;
-
 	pr_debug("checkentry targinfo %s\n", info->label);
 
 	if (info->timeout == 0) {
@@ -359,7 +378,7 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 	info->timer = __idletimer_tg_find_by_label(info->label);
 	if (info->timer) {
 		info->timer->refcnt++;
-		reset_timer(info, NULL);
+		reset_timer(info);
 		pr_debug("increased refcnt of timer %s to %u\n",
 			 info->label, info->timer->refcnt);
 	} else {
@@ -370,9 +389,7 @@ static int idletimer_tg_checkentry(const struct xt_tgchk_param *par)
 			return ret;
 		}
 	}
-
 	mutex_unlock(&list_mutex);
-
 	return 0;
 }
 

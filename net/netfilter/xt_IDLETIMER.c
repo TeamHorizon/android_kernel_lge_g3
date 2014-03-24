@@ -179,6 +179,44 @@ static void idletimer_tg_expired(unsigned long data)
 	schedule_work(&timer->work);
 }
 
+static int idletimer_resume(struct notifier_block *notifier,
+		unsigned long pm_event, void *unused)
+{
+	struct timespec ts;
+	unsigned long time_diff, now = jiffies;
+	struct idletimer_tg *timer = container_of(notifier,
+			struct idletimer_tg, pm_nb);
+
+	switch (pm_event) {
+	case PM_SUSPEND_PREPARE:
+		get_monotonic_boottime(&timer->last_suspend_time);
+		break;
+	case PM_POST_SUSPEND:
+		if (!timer || !timer->active)
+			break;
+		/* since jiffies are not updated when suspended now represents
+		 * the time it would have suspended */
+		if (time_after(timer->timer.expires, now)) {
+			get_monotonic_boottime(&ts);
+			ts = timespec_sub(ts, timer->last_suspend_time);
+			time_diff = timespec_to_jiffies(&ts);
+			if (timer->timer.expires > (time_diff + now)) {
+				mod_timer_pending(&timer->timer,
+						(timer->timer.expires - time_diff));
+			} else {
+				del_timer(&timer->timer);
+				timer->timer.expires = 0;
+				timer->active = false;
+				schedule_work(&timer->work);
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	return NOTIFY_DONE;
+}
+
 static int idletimer_tg_create(struct idletimer_tg_info *info)
 {
 	int ret;

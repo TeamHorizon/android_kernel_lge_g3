@@ -210,20 +210,6 @@ static int idletimer_tg_create(struct idletimer_tg_info *info)
 	info->timer->refcnt = 1;
 	info->timer->send_nl_msg = (info->send_nl_msg == 0) ? false : true;
 	info->timer->active = true;
-	info->timer->timeout = info->timeout;
-
-	info->timer->delayed_timer_trigger.tv_sec = 0;
-	info->timer->delayed_timer_trigger.tv_nsec = 0;
-	info->timer->work_pending = false;
-	info->timer->uid = 0;
-	get_monotonic_boottime(&info->timer->last_modified_timer);
-
-	info->timer->pm_nb.notifier_call = idletimer_resume;
-	ret = register_pm_notifier(&info->timer->pm_nb);
-	if (ret)
-		printk(KERN_WARNING "[%s] Failed to register pm notifier %d\n",
-				__func__, ret);
-
 	mod_timer(&info->timer->timer,
 		  msecs_to_jiffies(info->timeout * 1000) + jiffies);
 
@@ -237,46 +223,6 @@ out_free_timer:
 	kfree(info->timer);
 out:
 	return ret;
-}
-
-static void reset_timer(const struct idletimer_tg_info *info,
-			struct sk_buff *skb)
-{
-	unsigned long now = jiffies;
-	struct idletimer_tg *timer = info->timer;
-	bool timer_prev;
-
-	spin_lock_bh(&timestamp_lock);
-	timer_prev = timer->active;
-	timer->active = true;
-	/* timer_prev is used to guard overflow problem in time_before*/
-	if (!timer_prev || time_before(timer->timer.expires, now)) {
-		pr_debug("Starting Checkentry timer (Expired, Jiffies): %lu, %lu\n",
-				timer->timer.expires, now);
-
-		/* Stores the uid resposible for waking up the radio */
-		if (skb && (skb->sk)) {
-			struct sock *sk = skb->sk;
-			read_lock_bh(&sk->sk_callback_lock);
-			if ((sk->sk_socket) && (sk->sk_socket->file) &&
-		    (sk->sk_socket->file->f_cred))
-				timer->uid = sk->sk_socket->file->f_cred->uid;
-			read_unlock_bh(&sk->sk_callback_lock);
-		}
-
-		/* checks if there is a pending inactive notification*/
-		if (timer->work_pending)
-			timer->delayed_timer_trigger = timer->last_modified_timer;
-		else {
-			timer->work_pending = true;
-			schedule_work(&timer->work);
-		}
-	}
-
-	get_monotonic_boottime(&timer->last_modified_timer);
-	mod_timer(&timer->timer,
-			msecs_to_jiffies(info->timeout * 1000) + now);
-	spin_unlock_bh(&timestamp_lock);
 }
 
 /*

@@ -1818,16 +1818,6 @@ int mdss_mdp_pp_init(struct device *dev)
 		}
 
 	}
-#if defined(CONFIG_LCD_KCAL)
-/* LGE_CHANGE_S
-* change code for LCD KCAL
-* 2013-05-08, seojin.lee@lge.com
-*/
-	if (!ret) {
-		mdss_mdp_pp_argc();
-		update_preset_lcdc_lut();
-	}
-#endif
 	mutex_unlock(&mdss_pp_mutex);
 	return ret;
 }

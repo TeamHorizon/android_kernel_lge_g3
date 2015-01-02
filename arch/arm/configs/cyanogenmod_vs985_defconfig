@@ -399,8 +399,11 @@ CONFIG_LGE_PSEUDO_CHG_UI=y
 CONFIG_LGE_BOOTLOADER_TIME_CHECKER=y
 CONFIG_LGE_USES_SMD_DS_TTY=y
 CONFIG_LGE_KSWITCH=y
+<<<<<<< HEAD:arch/arm/configs/cyanogenmod_vs985_defconfig
 CONFIG_FB_MSM_MDSS_KCAL_CTRL=y
 # CONFIG_LCD_KCAL is not set
+=======
+>>>>>>> de1fb80... g3: Remove LGE's LCD_KCAL driver:arch/arm/configs/vs985_defconfig
 # CONFIG_LGE_QSDL_SUPPORT is not set
 CONFIG_LGE_QFPROM_INTERFACE=y
 # CONFIG_MSM_STACKED_MEMORY is not set

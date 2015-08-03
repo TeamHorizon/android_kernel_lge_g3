@@ -36,6 +36,10 @@
 #include <linux/powersuspend.h>
 #endif
 
+#ifdef CONFIG_POWERSUSPEND
+#include <linux/powersuspend.h>
+#endif
+
 #define DT_CMD_HDR 6
 
 #ifdef CONFIG_MACH_LGE

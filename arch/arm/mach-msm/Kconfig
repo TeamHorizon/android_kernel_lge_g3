@@ -3060,43 +3060,4 @@ config HAS_MACH_MEMUTILS
 	bool "Motorola MSM memcpy enhancements"
 	help
 	Faster memcpy performance for Krait
-
-config MSM_HOTPLUG
-	bool "MSM hotplug driver"
-	depends on HOTPLUG_CPU
-	default n
-	help
-	  The MSM hotplug driver controls on-/offlining of additional cores based
-	  on current cpu load.
-
-config INTELLI_HOTPLUG
-	bool "Intelli hotplug driver"
-	depends on HOTPLUG_CPU
-	default n
-	help
-	  An intelligent cpu hotplug driver for
-	  Low Latency Frequency Transition capable processors.
-
-config BRICKED_HOTPLUG
-	bool "Enable kernel based mpdecision"
-	depends on MSM_RUN_QUEUE_STATS
-	default n
-	help
-	  This enables kernel based multi core control.
-	  (up/down hotplug based on load)
-
-config ALUCARD_HOTPLUG
-	bool "Enable alucard-hotplug cpu hotplug driver"
-	default n
-	help
-	  Generic Alucard-hotplug cpu hotplug driver for ARM SOCs
-
-config MSM_LIMITER
-	bool "MSM Frequency Limiter Driver"
-	depends on (LCD_NOTIFY || POWERSUSPEND || HAS_EARLYSUSPEND)
-	default n
-	help
-	  The MSM Frequency Limiter Driver controls max frequency limit for each CPU
-	  to desired value on suspend/resume
-
 endif

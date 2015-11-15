@@ -203,6 +203,7 @@ struct adreno_device {
 	struct adreno_dispatcher dispatcher;
 	struct adreno_busy_data busy_data;
 
+	struct work_struct start_work;
 	struct work_struct input_work;
 	unsigned int ram_cycles_lo;
 };
@@ -218,7 +219,6 @@ enum adreno_device_flags {
 	ADRENO_DEVICE_PWRON_FIXUP = 1,
 	ADRENO_DEVICE_INITIALIZED = 2,
 	ADRENO_DEVICE_STARTED = 3,
-	ADRENO_DEVICE_HANG_INTR = 4,
 };
 
 #define PERFCOUNTER_FLAG_NONE 0x0

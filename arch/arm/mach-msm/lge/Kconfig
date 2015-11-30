@@ -67,4 +67,10 @@ config SHITTY_VARIANT
 	  section mismatches and allow them to continue on with their presumably shitty
 	  existance and gcc 4.8.
 
+config MACH_MSM8974_G3_GLOBAL_COM_LOWMEM
+	depends on MACH_MSM8974_G3_GLOBAL_COM
+	bool "MSM8974 G3 GLOBAL COM LOWMEM"
+	help
+	  Support for the Qualcomm MSM8974 G3 GLOBAL LOWMEM device.
+
 endmenu

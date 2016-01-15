@@ -25,14 +25,19 @@
 #include <linux/suspend.h>
 #include <linux/syscore_ops.h>
 #include <linux/rtc.h>
+#include <linux/ftrace.h>
 #include <trace/events/power.h>
 
 #include "power.h"
 
-const char *const pm_states[PM_SUSPEND_MAX] = {
-#ifdef CONFIG_EARLYSUSPEND
-	[PM_SUSPEND_ON]		= "on",
+#ifdef CONFIG_PM_SYNC_BEFORE_SUSPEND
+static int suspendsync = 1;
+#else
+static int suspendsync;
 #endif
+
+const char *const pm_states[PM_SUSPEND_MAX] = {
+	[PM_SUSPEND_FREEZE]	= "freeze",
 	[PM_SUSPEND_STANDBY]	= "standby",
 	[PM_SUSPEND_MEM]	= "mem",
 };
@@ -216,6 +221,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 			goto Close;
 	}
 	suspend_console();
+	ftrace_stop();
 	suspend_test_start();
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
@@ -235,6 +241,7 @@ int suspend_devices_and_enter(suspend_state_t state)
 	suspend_test_start();
 	dpm_resume_end(PMSG_RESUME);
 	suspend_test_finish("resume devices");
+	ftrace_start();
 	resume_console();
  Close:
 	if (suspend_ops->end)
@@ -279,9 +286,14 @@ static int enter_state(suspend_state_t state)
 	if (!mutex_trylock(&pm_mutex))
 		return -EBUSY;
 
-	printk(KERN_INFO "PM: Syncing filesystems ... ");
-	sys_sync();
-	printk("done.\n");
+	if (state == PM_SUSPEND_FREEZE)
+		freeze_begin();
+
+	if (suspendsync) {
+		printk(KERN_INFO "PM: Syncing filesystems ... ");
+		sys_sync();
+		printk("done.\n");
+	}
 
 	pr_debug("PM: Preparing system for %s sleep\n", pm_states[state]);
 	error = suspend_prepare();
@@ -342,3 +354,10 @@ int pm_suspend(suspend_state_t state)
 	return error;
 }
 EXPORT_SYMBOL(pm_suspend);
+
+static int __init suspendsync_setup(char *str)
+{
+	suspendsync = simple_strtoul(str, NULL, 0);
+	return 1;
+}
+__setup("suspendsync=", suspendsync_setup);

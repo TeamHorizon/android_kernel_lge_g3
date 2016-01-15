@@ -234,7 +234,7 @@ int g3_display_send_event_to_mdss_display(unsigned long val, void *v){
 
 	mutex_lock(&mdp5_data->dfps_lock);
 
-	wdfps = g3_display_opp_table[val].freq;
+	wdfps = 60;
 
 	if (wdfps == pdata->panel_info.mipi.frame_rate) {
 		pr_debug("%s: FPS is already %d\n", __func__, wdfps);
@@ -243,14 +243,16 @@ int g3_display_send_event_to_mdss_display(unsigned long val, void *v){
 	}
 
 	if (wdfps < 50) {
-		pr_err("Unsupported FPS. Configuring to min_fps = 50\n");
-		wdfps = 50;
+		pr_err("Unsupported FPS. Configuring to min_fps = 60\n");
+		wdfps = 60;
 		ret = mdss_mdp_ctl_update_fps(mdp5_data->ctl, wdfps);
 	} else if (wdfps > 60) {
 		pr_err("Unsupported FPS. Configuring to max_fps = 60\n");
 		wdfps = 60;
 		ret = mdss_mdp_ctl_update_fps(mdp5_data->ctl, wdfps);
 	} else {
+		pr_err("Unsupported FPS. Configuring to max_fps = 60\n");
+		wdfps = 60;
 		ret = mdss_mdp_ctl_update_fps(mdp5_data->ctl, wdfps);
 	}
 	if (!ret) {

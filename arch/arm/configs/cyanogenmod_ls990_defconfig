@@ -3696,12 +3696,16 @@ CONFIG_CRYPTO_ANSI_CPRNG=y
 # CONFIG_CRYPTO_USER_API_HASH is not set
 # CONFIG_CRYPTO_USER_API_SKCIPHER is not set
 CONFIG_CRYPTO_HW=y
-CONFIG_CRYPTO_DEV_QCE50=y
 # CONFIG_FIPS_ENABLE is not set
 CONFIG_CRYPTO_DEV_QCRYPTO=y
 CONFIG_CRYPTO_DEV_QCE=y
 CONFIG_CRYPTO_DEV_QCEDEV=y
 # CONFIG_CRYPTO_DEV_OTA_CRYPTO is not set
+<<<<<<< HEAD:arch/arm/configs/cyanogenmod_ls990_defconfig
+=======
+# CONFIG_CRYPTO_DEV_KFIPS_PERF is not set
+# CONFIG_CRYPTO_DEV_KFIPS is not set
+>>>>>>> fd05f1c... config: Disable KFIPS:arch/arm/configs/cyanogenmod_d801_defconfig
 CONFIG_BINARY_PRINTF=y
 
 #
